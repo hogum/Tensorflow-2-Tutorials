@@ -5,6 +5,9 @@
 import tensorflow as tf
 import numpy as np
 
+import matplotlib.pyplot as plt
+from PIL import Image
+
 # The Encoder and Decoder are ``layers`` that will be components
 # of the AutoEncoder
 
@@ -65,3 +68,81 @@ class AutoEncoder(tf.keras.models.Model):
         reconstructed = self.decoder(h)
 
         return reconstructed
+
+
+def loss(original_x, reconstructed, batch_size):
+    """
+       Computes reconstruction loss
+           (loss between the original and modeled images)
+    """
+    loss = tf.nn.sigmoid_cross_entropy_with_logits(
+        labels=original_x, logits=reconstructed)
+
+    # KL divergence
+    loss = tf.reduce_sum(loss) / batch_size
+    return loss
+
+
+def train(model, dataset, lr=1e-4, epochs=20, batch_size=128):
+    """
+        Fits the model
+    """
+    optimizer = tf.keras.optimizers.Adam(lr)
+
+    for epoch in range(epochs):
+        for step, x in enumerate(dataset):
+            # [28, 28] -> [None, 28 * 28] Batch size dim
+            x = tf.reshape(x, [-1, 28 * 28])
+
+            with tf.GradientTape() as tape:
+                # Forward pass
+                fake_imgs = model(x)
+
+                # loss
+                reconstruction_loss = loss(x, fake_imgs, batch_size)
+            grads = tape.gradient(target=reconstruction_loss,
+                                  sources=model.trainable_variables)
+            # clip gradients
+            grads = tf.clip_by_global_norm(grads, 15)
+            optimizer.apply_gradients(zip(grads, model.trainable_variables))
+
+            if not step % 20:
+                print(f'[epoch: {epoch}],[step: {step}]' +
+                      f'   loss: {reconstruction_loss:.5f}'
+                      )
+
+        # Save reconstructed images of every batch
+        save_images(model, x[:batch_size // 4], epoch)
+
+
+def save_images(model, x, epoch):
+    idx = 0
+    grid_size = 196
+    image_grid = Image.new(mode='L', size=[grid_size, grid_size])
+
+    # reconstruct images
+    logits = model(x)
+    output = tf.nn.sigmoid(logits)
+
+    # [Batch_s, 784] - > [batch_s, 28, 28]
+    fake_imgs = tf.reshape(output, [-1, 28, 28]).numpy() * 255
+
+    # original images
+    original_imgs = tf.reshape(x, [-1, 28, 28])
+
+    # Concatenate reconstructed and original images
+    concat_tnsr = tf.concat([original_imgs, fake_imgs], axis=0)
+    images = concat_tnsr.numpy() * 255
+    images = images.astype('uint8')
+
+    for row in range(0, grid_size, 28):
+        for col in range(0, grid_size, 28):
+            img = images[idx]
+            img = Image.fromarray(img, mode='L')
+            image_grid.paste(img, (row, col))
+            idx += 1
+    image_grid.save(f'.images/autoencoder/epoch_{epoch + 1}.png')
+    print('Image saved')
+
+    plt.imshow(np.asarray(image_grid))
+    plt.show()
