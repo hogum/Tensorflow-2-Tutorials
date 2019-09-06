@@ -60,6 +60,7 @@ class AutoEncoder(tf.keras.models.Model):
     """
 
     def __init__(self, h_dim, image_dim):
+        super(AutoEncoder, self).__init__()
         self.encoder = Encoder(h_dim)
         self.decoder = Decoder(h_dim, image_dim)
 
@@ -103,11 +104,11 @@ def train(model, dataset, lr=1e-4, epochs=20, batch_size=128):
             grads = tape.gradient(target=reconstruction_loss,
                                   sources=model.trainable_variables)
             # clip gradients
-            grads = tf.clip_by_global_norm(grads, 15)
+            grads, _ = tf.clip_by_global_norm(grads, 15)
             optimizer.apply_gradients(zip(grads, model.trainable_variables))
 
-            if not step % 20:
-                print(f'[epoch: {epoch}],[step: {step}]' +
+            if not step % 25:
+                print(f'epoch: [{epoch + 1}/{epochs}], step: [{step}]' +
                       f'   loss: {reconstruction_loss:.5f}'
                       )
 
@@ -115,10 +116,15 @@ def train(model, dataset, lr=1e-4, epochs=20, batch_size=128):
         save_images(model, x[:batch_size // 4], epoch)
 
 
+grid_size = 196
+image_grid = Image.new(mode='L', size=[grid_size, grid_size])
+
+
 def save_images(model, x, epoch):
+    """
+        Saves reconstructed image plots
+    """
     idx = 0
-    grid_size = 196
-    image_grid = Image.new(mode='L', size=[grid_size, grid_size])
 
     # reconstruct images
     logits = model(x)
@@ -141,8 +147,42 @@ def save_images(model, x, epoch):
             img = Image.fromarray(img, mode='L')
             image_grid.paste(img, (row, col))
             idx += 1
-    image_grid.save(f'.images/autoencoder/epoch_{epoch + 1}.png')
-    print('Image saved')
 
-    plt.imshow(np.asarray(image_grid))
-    plt.show()
+    plt.imshow(np.asarray(image_grid), cmap='gray')
+
+    if not epoch % 20:
+        plt.savefig(f'autoencoder_epoch_{epoch + 1}.png')
+        print('Image saved')
+
+    # plt.show()
+
+
+def main():
+    """
+        Runs AutoEncoder
+    """
+    batch_size = 128
+
+    (x_train, _), (x_test, _) = tf.keras.datasets.mnist.load_data()
+    # Labels not required
+    x_train = np.concatenate([x_train, x_test], axis=0)
+
+    # [70000, 28, 28]
+    x_train = x_train.astype('float32') / 255.  # Use float dtype & normalize
+    img_h, img_w = x_train.shape[1:]
+
+    # Build model
+    model = AutoEncoder(h_dim=128, image_dim=img_w * img_h)
+    model.build(input_shape=(4, img_h * img_w))  # [n_layers, img_size]
+    model.summary()
+
+    # create dataset
+    dataset = tf.data.Dataset.from_tensor_slices(
+        x_train).shuffle(buffer_size=x_train.shape[0] * 2).batch(batch_size)
+
+    # train
+    train(model, dataset, batch_size=batch_size, epochs=20000)
+
+
+if __name__ == '__main__':
+    main()
