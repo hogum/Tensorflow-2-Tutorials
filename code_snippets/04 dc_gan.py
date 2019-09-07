@@ -41,24 +41,27 @@ class Generator(tf.keras.models.Model):
 
     def __init__(self, in_shape=(100, )):
         super(Generator, self).__init__()
-        self.inputs_ = tf.keras.Input(shape=in_shape)
 
-        self.x0 = tf.keras.layers.Dense(units=256*28*28, input_shape=in_shape)
+        self.x0 = tf.keras.layers.Dense(
+            units=256*28*28, use_bias=False, input_shape=in_shape)
         self.x1 = tf.keras.layers.BatchNormalization()
         self.x2 = tf.keras.layers.LeakyReLU()
 
-        self.x3 = tf.keras.layers.Reshape([28, 28, 256])
+        self.x3 = tf.keras.layers.Reshape((28, 28, 256))
 
-        self.x4 = tf.keras.layers.Convolution2DTranspose(filters=128,
-                                                         kernel_size=(5, 5),
-                                                         padding='same')
+        self.x4 = tf.keras.layers.Convolution2DTranspose(filters=256,
+                                                         kernel_size=2,
+                                                         strides=(1, 1),
+                                                         padding='same',
+                                                         use_bias=False)
         self.x5 = tf.keras.layers.BatchNormalization()
         self.x6 = tf.keras.layers.LeakyReLU()
 
         self.x7 = tf.keras.layers.Convolution2DTranspose(filters=64,
                                                          kernel_size=(5, 5),
                                                          strides=1,
-                                                         padding='same')
+                                                         padding='same',
+                                                         use_bias=False)
         self.x8 = tf.keras.layers.BatchNormalization()
         self.x9 = tf.keras.layers.LeakyReLU()
 
@@ -66,9 +69,11 @@ class Generator(tf.keras.models.Model):
             filters=1,
             kernel_size=(5, 5),
             strides=1,
+            activation='tanh',
+            use_bias=False,
             padding='same')
 
-    def call(self, inputs):
+    def call(self, inputs, training=False):
         """
             Forward pass
         """
@@ -101,8 +106,7 @@ class Discriminator(tf.keras.models.Model):
 
     def __init__(self):
         super(Discriminator, self).__init__()
-        self.inputs_ = tf.keras.Input(shape=(100, ))
-        self.x0 = tf.keras.layers.Conv1D(filters=64,
+        self.x0 = tf.keras.layers.Conv2D(filters=64,
                                          kernel_size=5,
                                          strides=2,
                                          padding='same',
@@ -121,7 +125,7 @@ class Discriminator(tf.keras.models.Model):
         self.x6 = tf.keras.layers.Flatten()
         self.output_prediction = tf.keras.layers.Dense(1)
 
-    def call(self, inputs):
+    def call(self, inputs, training=False):
         x = self.x0(inputs)
 
         for i in range(1, 7):
@@ -178,7 +182,7 @@ class GAN():
             Discriminator for each input batch
       """
         # Generate random noise
-        noise = tf.random_normal([batch_size, dim])
+        noise = tf.random.normal([batch_size, dim])
 
         with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
             gen_images = self.generator(noise, training=True)
@@ -188,17 +192,17 @@ class GAN():
             gen_loss = self.generator.loss_f(fake_output)
             disc_loss = self.discriminator.loss_f(real_output, fake_output)
 
-            gen_grads = gen_tape.gradient(
-                target=gen_loss,
-                sources=self.generator.trainable_variables)
-            disc_grads = disc_tape.gradient(
-                disc_loss,
-                self.discriminator.trainable_variables)
+        gen_grads = gen_tape.gradient(
+            target=gen_loss,
+            sources=self.generator.trainable_variables)
+        disc_grads = disc_tape.gradient(
+            disc_loss,
+            self.discriminator.trainable_variables)
 
-            self.gen_optimizer.apply_gradients(
-                zip(gen_grads, self.generator.trainable_variables))
-            self.disc_optimizer.apply_gradients(
-                zip(disc_grads, self.discriminator.trainable_variables))
+        self.gen_optimizer.apply_gradients(
+            zip(gen_grads, self.generator.trainable_variables))
+        self.disc_optimizer.apply_gradients(
+            zip(disc_grads, self.discriminator.trainable_variables))
 
     def train(self, dataset, epochs=50, batch_size=256, dim=100):
         """
@@ -244,14 +248,14 @@ def main():
     """
         Runs GAN
     """
+
     batch_size = 256
     model = GAN()
     # restore checkpoints
     # model.checkpoint.restore('./checkpoints')
     dataset = load_dataset(batch_size=batch_size)
-    model.generator.build(dataset)
 
-    # model.train(dataset, epochs=32, batch_size=batch_size)
+    model.train(dataset, epochs=32, batch_size=batch_size)
 
 
 if __name__ == '__main__':
