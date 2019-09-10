@@ -31,12 +31,10 @@ class UpSample(tf.keras.models.Model):
                 0, 0.02)
         )
         self.batch_norm = tf.keras.layers.BatchNormalization()
-
         if drop_out:
-            self.drop_out = tf.keras.layers.Dropout(
-                drop_out)
+            self.drop_out = tf.keras.layers.Dropout(drop_out)
 
-    def call(self, inputs, training=None):
+    def call(self, inputs, training=False):
         """
             Forward Pass
         """
@@ -165,25 +163,4 @@ class DownSampleDiscriminator(tf.keras.models.Model):
         DownSample for the Discriminator
     """
 
-    def __init__(self, filters, kernel_size=4, batch_norm=False):
-        super(DownSampleDiscriminator, self).__init__()
-
-        self.batch_norm = None
-        self.conv1 = tf.keras.layers.Conv2DTranspose(
-            filters,
-            kernel_size,
-            strides=2,
-            padding='same',
-            kernel_initializer=tf.random_normal_initializer(
-                0., 0.02),
-            use_bias=False)
-        if batch_norm:
-            self.batch_norm = tf.keras.layers.BatchNormalization()
-
-    def call(self, inputs, training=None):
-        x = self.conv1(inputs)
-        if self.batch_norm:
-            x = self.batch_norm(x, training=training)
-        activation = tf.nn.leaky_relu(x)
-
-        return activation
+    def __init__(self, filters, kernel_size, batch_norm=False)
