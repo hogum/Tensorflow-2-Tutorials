@@ -158,6 +158,42 @@ class Discriminator(tf.keras.models.Model):
 
     def __init__(self):
         super(Discriminator, self).__init__()
+        self.x_0 = DownSample(filters=64)           # (None, 128, 128, 64)
+        self.x_1 = DownSample(128, batch_norm=True)  # (None, 64, 64, 128)
+        self.x_2 = DownSample(256, batch_norm=True)  # (None, 32, 32, 256)
+
+        # [-1, 32, 32, 256] -> [-1, 34, 34, 256]
+        self.x_3 = tf.keras.layers.ZeroPadding2D()
+        self.x_4 = tf.keras.layers.Conv2D(
+            filters=512,
+            kernel_size=4,
+            kernel_initializer=tf.random_normal_initializer(0., 0.02),
+            use_bias=False)  # (None, 31, 31, 512)
+        self.x_5 = tf.keras.layers.BatchNormalization()
+        self.x_6 = tf.keras.layers.LeakyReLU()
+
+        # [-1, 31, 31, 512] -> [-1, 33, 33, 512]
+        self.x_7 = tf.keras.layers.ZeroPadding2D()
+        # (None, 30, 30, 1)
+        self.output_pred = tf.keras.layers.Convolution2D(
+            1, 4,
+            kernel_initializer=tf.random_normal_initializer(0., 0.02)
+        )
+
+    def call(self, inputs, training=None):
+        input_img, target_img = inputs
+
+        # Concatenate input and target image
+        # (None, 256, 256, channels * 2)
+        x = tf.concat([input_img, target_img], axis=-1)
+
+        # Call x on each layer
+        for i in range(0, 8):
+            x = getattr(self, f'x_{i}')(x)
+
+        x = self.output_pred(x)  # (None, 30, 30, 1)
+
+        return x
 
 
 class DownSampleDiscriminator(tf.keras.models.Model):
