@@ -1,7 +1,8 @@
 import os
 
 import tensorflow as tf
-import numpy as np
+import matplotlib.pyplot as plt
+
 
 BATCH_SIZE = 1
 IMG_WIDTH, IMG_HEIGHT = 256, 256
@@ -87,3 +88,75 @@ def crop_image(input_image, real_image):
     cropped_im = tf.random_crop(stacked_im, size=[2, IMG_HEIGHT, IMG_WIDTH, 3])
 
     return cropped_im
+
+
+def load_dataset(split):
+    """
+        Creates input datasets from the downloaded data
+        ---------
+        split: str
+            train or test
+    """
+    data_path = tf.data.Dataset.list_files(DATA_PATH + f'/{split}/*.jpg')
+    train_data = [load_image(x, random_jitter=True)
+                  for x in iter(data_path)]
+    train_data = tf.stack(train_data, axis=0)  # (256, 256, 3)
+    train_dataset = tf.data.Dataset.from_tensor_slices(
+        train_data).shuffle(400).batch(BATCH_SIZE)
+    return train_dataset
+
+
+def discriminator_loss(real_output, generated_output):
+    """
+        Computes the real and generated sigmoid cross
+        entropy loss
+    """
+    loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+
+    real_loss = loss(tf.ones_like(real_output), real_output)
+    generated_loss = loss(tf.zeros_like(generated_output), generated_output)
+
+    return real_loss + generated_loss
+
+
+def generator_loss(disc_generated_output, generated_output, target):
+    """
+        Computes cross entropy loss of generated images
+    """
+    lambda_ = 100
+    loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+
+    gan_loss = loss(tf.ones_like(disc_generated_output), disc_generated_output)
+
+    # Mean absolute error
+    l1_loss = tf.reduce_mean(tf.abs(target - generated_output))
+
+    # gan_loss + lambda (|MAE|)
+    total_loss = gan_loss + (lambda_ * l1_loss)
+    return total_loss
+
+
+def generated_images(model, test_input, target, epoch):
+    """
+        Run the model for generated output
+    """
+    pred = model(test_input, training=True)
+    plt.figure(figsize=(15, 15))
+
+    display = test_input[0], target[0], pred[0]
+    titles = 'Input image', 'Ground Truth', 'Predicted Image'
+
+    for i in range(3):
+        plt.subplot(1, 3, i + 1)
+        plt.title(titles[i])
+        plt.imshow(display[i] * 0.5 + 0.5)
+        plt.axis('off')
+    plt.savefig(f'images/epoch_{epoch}.png')
+    # plt.show()
+
+
+def train(generator, discriminator, datasets, epochs=100):
+    """
+        Train the model
+    """
+    train_dataset, test_dataset = datasets
