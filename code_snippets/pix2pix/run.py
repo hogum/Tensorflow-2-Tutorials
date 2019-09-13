@@ -1,8 +1,10 @@
 import os
+import time
 
 import tensorflow as tf
 import matplotlib.pyplot as plt
 
+from pixel2pixel import Generator, Discriminator
 
 BATCH_SIZE = 1
 IMG_WIDTH, IMG_HEIGHT = 256, 256
@@ -160,3 +162,67 @@ def train(generator, discriminator, datasets, epochs=100):
         Train the model
     """
     train_dataset, test_dataset = datasets
+    steps = train_dataset.shape[0]
+
+    for epoch in range(epochs):
+        start = time.time()
+        for step, inputs in enumerate(train_dataset):
+            disc_loss, gen_loss = train_step(inputs, generator, discriminator)
+            if not step % 100:
+                print(f'epoch: [{epoch}/{epochs}], step: [{step}/{steps}], '
+                      + f'  disc_loss: {disc_loss:.4f}  '
+                        + f'gen_loss: {gen_loss:.4f}')
+
+                for x in test_dataset:
+                    input_image, target = tf.split(
+                        x, num_or_size_splits=[3, 3], axis=3)
+                    generated_images(generator, input_image, target, epoch)
+
+        print(f'Time taken for epoch {epoch + 1}: {time.time() - start}')
+
+
+def train_step(inputs, generator, discriminator, lr=2e-5):
+    """
+        Applies the loss gradients
+    """
+    gen_optimizer = tf.keras.optimizers.Adam(lr, beta_1=0.5)
+    disc_optimizer = tf.keras.optimizers.Adam(lr, beta_1=0.5)
+    input_image, target = tf.split(inputs,
+                                   num_or_size_splits=[3, 3],
+                                   axis=3)
+
+    with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
+        # Pixel2pixel generated image
+        gen_output = generator(input_image, training=True)
+        # original image + real pix2pix image
+        disc_real_output = discriminator([input_image, target], training=True)
+        # fake pix2pix + original image
+        disc_fake_output = discriminator(
+            [input_image, gen_output], training=True)
+
+        gen_loss = generator_loss(disc_fake_output, gen_output, target)
+        disc_loss = discriminator(disc_real_output, disc_fake_output)
+
+    gen_grads = gen_tape.gradient(gen_loss, generator.trainable_variables)
+    disc_grads = disc_tape.gradient(
+        disc_loss, discriminator.trainable_variables)
+
+    gen_optimizer.apply_gradients(
+        zip(gen_grads, generator.trainable_variables))
+    disc_optimizer.apply_gradients(
+        zip(disc_grads, discriminator.trainable_variables))
+
+    return disc_loss, gen_loss
+
+
+def main():
+    datasets_names = ['train', 'test']
+    datasets = [load_dataset(name) for name in datasets_names]
+    train(generator=Generator(),
+          discriminator=Discriminator(),
+          datasets=datasets,
+          epochs=2000)
+
+
+if __name__ == '__main__':
+    main()
